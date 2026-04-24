@@ -35,6 +35,26 @@ git clone https://github.com/stephanz1101/wechat-layout-html.git ~/.codex/skills
 
 Do not treat this repository's bundled Markdown renderer as the primary layout engine when strict 公众号排版 is required.
 
+## Agent Prompt Examples
+
+Use prompts like these after installation:
+
+```text
+Use wechat-mp-publish to upload this finished HTML article to my WeChat Official Account draft box.
+```
+
+```text
+把这篇文章发到微信公众号草稿箱。
+```
+
+```text
+先按微信公众号排版规则生成最终 HTML，再上传到公众号草稿箱。
+```
+
+```text
+Re-layout this Markdown with wechat-layout-html first, then send the final HTML to my WeChat MP draft box.
+```
+
 ## Environment Variables
 
 The publish script expects:
