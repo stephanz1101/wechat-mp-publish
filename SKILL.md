@@ -1,106 +1,157 @@
 ---
 name: wechat-mp-publish
-description: Publish articles to WeChat Official Account (微信公众号) draft box. Use this skill whenever the user wants to publish, post, or send an article to their WeChat public account, create a WeChat MP draft, push content to 公众号, or mentions 微信公众号发布/草稿箱. Also trigger when the user has finished writing an article and wants to publish it to WeChat, even if they just say "发到公众号" or "推送到草稿箱".
+description: 发送文章到微信公众号草稿箱。Use when the user wants to upload an article to 微信公众号, create a 公众号 draft, 发到公众号, 推送到草稿箱, or publish finished content into the WeChat Official Account draft box.
 ---
 
 # WeChat MP Publish
 
-Publish articles to a WeChat Official Account draft box via the MP API.
+Publish an article to the WeChat Official Account draft box via the MP API.
+
+## When to use
+
+Use this skill when:
+
+- the user says `发到公众号`
+- the user wants a `微信公众号草稿`
+- the user has finished writing and wants the article uploaded to the MP draft box
+- the user wants to preview the rendered WeChat HTML before uploading
 
 ## Prerequisites
 
-The user needs two environment variables set:
-- `WECHAT_MP_APPID` — the AppID from 微信公众平台 → 设置与开发 → 基本配置
-- `WECHAT_MP_SECRET` — the AppSecret from the same page
+This workflow expects these environment variables:
 
-If either is missing, tell the user where to find them and help them set the env vars.
+- `WECHAT_MP_APPID`
+- `WECHAT_MP_SECRET`
 
-The user's current IP must be in the 公众号 IP whitelist. If you get an `errcode: 40164` response, extract the IP from the error message and tell the user to add it at: 设置与开发 → 基本配置 → IP白名单.
+If either is missing, tell the user to get them from:
 
-## Workflow
+- 微信公众平台 -> 设置与开发 -> 基本配置
 
-### 1. Gather article content
+If the API returns `errcode: 40164`, extract the IP from the error and tell the user to add it to:
 
-You need at minimum:
-- **title** — the article headline
-- **content** — the article body (plain text or markdown; you'll convert it to HTML)
-- **author** — defaults to the account name if not provided
+- 微信公众平台 -> 设置与开发 -> 基本配置 -> IP白名单
 
-The content often comes from the current conversation — the user may have just finished writing or editing an article with you. Look for it in context before asking.
+## Default workflow
 
-### 2. Convert content to WeChat-compatible HTML
+1. Find the article content from the current conversation or an existing markdown/text file.
+2. Decide the title.
+3. If the input is Markdown or an article draft, first generate final WeChat-safe HTML with `wechat-layout-html`.
+4. Upload the final HTML to the draft box.
+5. Report the result clearly.
 
-WeChat MP has specific HTML requirements. Use the bundled `scripts/publish.py` which handles the conversion. The default styling is:
+## Layout-first rule
 
+When the user asks to `排版并上传`, `重新排版上传`, `按微信公众号排版规则发草稿箱`, or gives a Markdown article and wants a draft:
+
+- Do not use this skill's built-in Markdown renderer as the final layout engine.
+- Do use `wechat-layout-html` first, with the locked blue div-only style.
+- Then upload the generated HTML content through the WeChat API.
+- If the input is already final WeChat-safe HTML, upload it directly.
+
+The bundled renderer in `publish.py` is only a fallback for simple drafts. It is not the house-style renderer.
+
+## Script fallback
+
+For simple content without the house style requirement, run the bundled publish script in one of two modes:
+   - `--dry-run` to render WeChat-friendly HTML locally first
+   - normal mode to upload into the draft box
+
+If the article already follows your standard local format with:
+
+- `# 标题`
+- `## 正文`
+
+prefer the bundled shortcut script `publish_article_file.py`.
+
+## Recommended usage
+
+### Dry run first
+
+```bash
+python3 <skill-path>/scripts/publish.py \
+  --title "文章标题" \
+  --content-file /path/to/article.md \
+  --dry-run \
+  --output-html /tmp/wechat-preview.html
 ```
-font-size: 15px
-line-height: 2
-color: #333
-```
 
-The user can customize styling by providing overrides. Supported options:
-- `font_size` — e.g., "16px", "14px"
-- `line_height` — e.g., "1.8", "2.5"
-- `color` — e.g., "#555", "#222"
-- `heading_size` — size for section headings, e.g., "20px"
-
-The script converts markdown-like content to HTML:
-- Paragraphs become `<p>` tags
-- Lines starting with `**N.` become bold numbered items
-- Section headings (lines that are short and look like titles) become styled headings
-- `**text**` becomes `<strong>text</strong>`
-- Line breaks within logical blocks become `<br/>`
-
-### 3. Select cover image
-
-By default, fetch the most recent image from the account's material library. The script handles this automatically — it calls `batchget_material` and picks the first image's `media_id`.
-
-### 4. Publish to draft box
-
-The script calls the draft API (`/cgi-bin/draft/add`) and returns the `media_id` of the created draft. Tell the user the draft is ready and they can find it in 微信公众平台 → 草稿箱.
-
-## Usage
-
-Run the bundled script:
+### Upload to draft box
 
 ```bash
 python3 <skill-path>/scripts/publish.py \
   --title "文章标题" \
   --author "作者名" \
-  --content-file /path/to/content.txt \
-  [--font-size 15px] \
-  [--line-height 2] \
-  [--color "#333"] \
-  [--heading-size 20px] \
-  [--thumb-media-id MEDIA_ID]
+  --content-file /path/to/article.md
 ```
 
-Or pass content via stdin:
+### Upload directly from an article file
 
 ```bash
-echo "文章内容" | python3 <skill-path>/scripts/publish.py \
+python3 <skill-path>/scripts/publish_article_file.py \
+  /path/to/article.md
+```
+
+This script automatically:
+
+- extracts the first `# 标题`
+- extracts everything after `## 正文`
+- sends the result through `publish.py`
+
+### Dry run directly from an article file
+
+```bash
+python3 <skill-path>/scripts/publish_article_file.py \
+  /path/to/article.md \
+  --dry-run \
+  --output-html /tmp/wechat-preview.html
+```
+
+### Read content from stdin
+
+```bash
+cat /path/to/article.md | python3 <skill-path>/scripts/publish.py \
   --title "文章标题" \
   --author "作者名" \
   --content-from-stdin
 ```
 
-The script reads `WECHAT_MP_APPID` and `WECHAT_MP_SECRET` from environment variables.
+## Supported options
 
-### Output
+- `--title` article title
+- `--author` author name
+- `--content-file` article file path
+- `--content-from-stdin` read content from stdin
+- `--thumb-media-id` use a specific cover image media id
+- `--font-size`
+- `--line-height`
+- `--color`
+- `--heading-size`
+- `--subheading-size`
+- `--dry-run` render HTML only, do not call WeChat API
+- `--output-html` write rendered HTML to a file
 
-On success, the script prints JSON:
+`publish_article_file.py` accepts the same styling and publishing options, while deriving title and body automatically from the article file.
+
+If `--thumb-media-id` is omitted, the script fetches the latest image from the account's material library.
+
+## Output behavior
+
+On success, the script prints JSON such as:
+
 ```json
 {"success": true, "media_id": "...", "message": "Draft published successfully"}
 ```
 
-On failure, it prints the error with guidance:
+On dry run, it prints JSON such as:
+
 ```json
-{"success": false, "errcode": 40164, "errmsg": "invalid ip ...", "hint": "Add IP x.x.x.x to your whitelist at 设置与开发 → 基本配置 → IP白名单"}
+{"success": true, "mode": "dry-run", "html_file": "/tmp/wechat-preview.html"}
 ```
 
-## Typical flow
+On failure, it prints structured JSON with `errcode`, `errmsg`, and a `hint` when possible.
 
-1. Write the article content to a temp file
-2. Run the publish script with title, author, and content
-3. Report the result to the user
-4. If IP whitelist error, guide the user to add the IP and retry
+## Notes
+
+- Prefer markdown files with clear headings and paragraphs.
+- For deep articles, keep headings explicit instead of relying on accidental short lines.
+- If the user wants to use a custom cover later, extend this skill rather than manually editing the script each time.

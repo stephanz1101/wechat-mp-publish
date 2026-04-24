@@ -1,0 +1,4 @@
+interface:
+  display_name: "公众号草稿发布"
+  short_description: "将文章渲染成微信兼容 HTML，并上传到微信公众号草稿箱"
+  default_prompt: "Use $wechat-mp-publish to upload this finished article into my WeChat Official Account draft box, or do a dry-run HTML preview first."
